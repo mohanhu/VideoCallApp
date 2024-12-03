@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "928861696606",
+    "project_id": "videocallrtcapp-9d1d9",
+    "storage_bucket": "videocallrtcapp-9d1d9.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:928861696606:android:9a4ec02b9433fbf5817acf",
+        "android_client_info": {
+          "package_name": "com.example.videocallrtcapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDk0rRu9JJ_XHhDrs94bbs6rj13cSFb2v0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

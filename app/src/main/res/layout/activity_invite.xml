@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/main"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".InviteActivity">
+
+    <TextView
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/_20sdp"
+        android:gravity="center"
+        android:text="Meeting call"
+        android:textSize="@dimen/_30sdp"
+        android:textStyle="bold"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <Button
+        android:id="@+id/ev_join_id"
+        android:layout_width="@dimen/_200sdp"
+        android:layout_height="wrap_content"
+        app:layout_constraintEnd_toEndOf="parent"
+        android:hint="Enter UserName"
+        android:text="Mohan"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="@+id/guideline" />
+
+
+    <Button
+        android:id="@+id/ev_kannan_id"
+        android:layout_width="@dimen/_200sdp"
+        android:layout_height="wrap_content"
+        android:hint="Enter UserName"
+        android:text="Kannan"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@+id/ev_join_id" />
+
+    <Button
+        android:id="@+id/create_Meeting"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/_30sdp"
+        android:text="Create Meeting"
+        android:visibility="invisible"
+        app:layout_constraintEnd_toEndOf="@+id/ev_join_id"
+        app:layout_constraintStart_toStartOf="@+id/ev_join_id"
+        app:layout_constraintTop_toBottomOf="@+id/ev_join_id" />
+
+    <Button
+        android:id="@+id/joinMeeting"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/_30sdp"
+        android:text="Join Meeting"
+        app:layout_constraintEnd_toEndOf="@+id/create_Meeting"
+        app:layout_constraintStart_toStartOf="@+id/create_Meeting"
+        app:layout_constraintTop_toBottomOf="@+id/create_Meeting" />
+
+    <androidx.constraintlayout.widget.Guideline
+        android:id="@+id/guideline"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        app:layout_constraintGuide_percent="0.3" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
