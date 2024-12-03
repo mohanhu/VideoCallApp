@@ -23,6 +23,9 @@ class WebRTCClient @Inject constructor(
 
     var localId = Instant.now().toString()
 
+
+
+
     //webrtc variables
     private val eglBaseContext = EglBase.create().eglBaseContext
     private val peerConnectionFactory by lazy { createPeerConnectionFactory() }
