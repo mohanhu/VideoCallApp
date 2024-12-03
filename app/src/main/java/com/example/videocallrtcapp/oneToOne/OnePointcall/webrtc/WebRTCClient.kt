@@ -19,6 +19,7 @@ class WebRTCClient @Inject constructor(
     private val gson: Gson,
 ) {
     //class variables
+
     var listener: WebRTCClientListener? = null
 
     var localId = Instant.now().toString()
