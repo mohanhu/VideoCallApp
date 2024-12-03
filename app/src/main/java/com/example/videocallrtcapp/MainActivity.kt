@@ -92,8 +92,8 @@ class MainActivity : AppCompatActivity() {
     private fun ActivityMainBinding.bindRemoteView() {
         val adapter = VideoCallAdapter(
             isRemoteView = true,
-            bindCallToWebClient = {
-                videoCallRepository.initRemoteSurfaceView(it)
+            bindCallToWebClient = {id,surface->
+                videoCallRepository.initRemoteSurfaceView(surface)
             }
         )
         remoteView.layoutManager=LinearLayoutManager(this@MainActivity,LinearLayoutManager.VERTICAL,false)
@@ -108,8 +108,8 @@ class MainActivity : AppCompatActivity() {
     private fun ActivityMainBinding.bindLocalView() {
         val localAdapter = VideoCallAdapter(
             isRemoteView = false,
-            bindCallToWebClient = {
-                videoCallRepository.initLocalSurfaceView(it,true)
+            bindCallToWebClient = { id,surface->
+                videoCallRepository.initLocalSurfaceView(userName,surface,true)
             }
         )
         localView.layoutManager=LinearLayoutManager(this@MainActivity,LinearLayoutManager.VERTICAL,false)

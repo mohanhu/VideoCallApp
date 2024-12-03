@@ -20,6 +20,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.webrtc.IceCandidate
 import org.webrtc.MediaStream
 import org.webrtc.MediaStreamTrack
@@ -65,16 +66,18 @@ class VideoCallRepository @Inject constructor(
                 DataModelType.Offer -> {
                     println("initializeWebrtcClient onCreateSuccess >>participantId>Offer>received>>>${dataModel.sender}>${dataModel.target}")
                     webRTCClient.onRemoteSessionReceived(
+                        dataModel.target,
                         SessionDescription(
                             SessionDescription.Type.OFFER,
                             dataModel.data.toString()
                         )
                     )
-                    webRTCClient.answer(dataModel.sender)
+                    webRTCClient.answer(dataModel.target,dataModel.sender)
                 }
                 DataModelType.Answer -> {
                     println("initializeWebrtcClient onCreateSuccess >>participantId>answer>received>>>${dataModel.sender}>${dataModel.target}")
                     webRTCClient.onRemoteSessionReceived(
+                        dataModel.target,
                         SessionDescription(
                             SessionDescription.Type.ANSWER,
                             dataModel.data.toString()
@@ -89,7 +92,7 @@ class VideoCallRepository @Inject constructor(
                         null
                     }
                     candidate?.let {
-                        webRTCClient.addIceCandidateToPeer(it)
+                        webRTCClient.addIceCandidateToPeer(dataModel.sender,it)
                     }
                 }
                 DataModelType.EndCall -> {
@@ -99,25 +102,41 @@ class VideoCallRepository @Inject constructor(
         }
     }
 
-    fun checkUserListWhoOneAddNew(){
-            firebaseClient.checkUserListWhoOneAddNew{ userId, whoAvailable->
-                if (whoAvailable.isNotEmpty()){
-                    CoroutineScope(Dispatchers.IO).launch {
-                        whoAvailable.forEach { user->
-                            println("checkUserListWhoOneAddNew Firebase 0 >>User>>${user}")
-                            try {
-                                sendConnectionRequest(userName = userId, targetName = user.deviceId){}
-                                sendConnectionRequest(userName = user.deviceId, targetName = userId){}
-                                startCall(user.deviceId)
+    fun checkUserListWhoOneAddNew() {
+        firebaseClient.checkUserListWhoOneAddNew { userId, whoAvailable ->
+            println("checkUserListWhoOneAddNew Firebase 0 >>User>>$userId")
+
+            if (whoAvailable.isNotEmpty()) {
+                CoroutineScope(Dispatchers.IO).launch {
+                    whoAvailable.forEach { user ->
+                       withContext(Dispatchers.Main){
+                           setWebInit(user.deviceId)
+                       }
+                        try {
+                            // Only one sendConnectionRequest might be needed in certain use cases
+                            sendConnectionRequest(userName = userId, targetName = user.deviceId) {
+                                // Handle callback if needed
                             }
-                            catch (e:Exception){ }
+                            // If both directions are needed, keep both requests
+                            sendConnectionRequest(userName = user.deviceId, targetName = userId) {
+                                // Handle callback if needed
+                            }
+
+                            startCall(userId, user.deviceId)
+                        } catch (e: Exception) {
+                            // Log or handle the exception properly
+                            e.printStackTrace()
                         }
                     }
                 }
+            } else {
+                setWebInit(userId, isOwnUser = true)
+                println("No available users found.")
+            }
         }
     }
 
-    fun setWebInit(userName: String) {
+    fun setWebInit(userName: String,isOwnUser:Boolean = false) {
         webRTCClient.listener = this
         webRTCClient.initializeWebrtcClient(participantId = userName, object : MyPeerObserver() {
 
@@ -148,10 +167,18 @@ class VideoCallRepository @Inject constructor(
             override fun onIceCandidate(p0: IceCandidate?) {
                 super.onIceCandidate(p0)
                 p0?.let {
-                    firebaseClient.findTargetName(userName){target->
-                        println("initializeWebrtcClient onIceCandidate >>> $target")
-                        webRTCClient.sendIceCandidate(target, it)
-                    }
+                   if (isOwnUser){
+                       firebaseClient.findTargetName(userName){target->
+                           println("initializeWebrtcClient onIceCandidate >>> $target")
+                           webRTCClient.sendIceCandidate(userName,target, it)
+                       }
+                   }
+                   else{
+                       firebaseClient.findTargetName(userName){target->
+                           println("initializeWebrtcClient onIceCandidate >>> $target")
+                           webRTCClient.sendIceCandidate(participantId = target, target = userName, iceCandidate = it)
+                       }
+                   }
                 }
             }
 
@@ -163,12 +190,14 @@ class VideoCallRepository @Inject constructor(
 //                     2. clear latest event inside my user section in firebase database
                     clearLatestEvent(userName)
                 }
+
+
             }
         })
     }
 
-    fun initLocalSurfaceView(view: SurfaceViewRenderer, isVideoCall: Boolean) {
-        webRTCClient.initLocalSurfaceView(view, isVideoCall)
+    fun initLocalSurfaceView(userId:String,view: SurfaceViewRenderer, isVideoCall: Boolean) {
+        webRTCClient.initLocalSurfaceView(userId,view, isVideoCall)
     }
 
     fun initRemoteSurfaceView(view: SurfaceViewRenderer) {
@@ -176,8 +205,8 @@ class VideoCallRepository @Inject constructor(
         this.remoteSurfaceView = view
     }
 
-    fun startCall(target:String) {
-        webRTCClient.call(target!!)
+    private fun startCall(userName: String, target:String) {
+        webRTCClient.call(userName,target)
     }
 
     fun endCall() {

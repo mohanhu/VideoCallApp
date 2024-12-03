@@ -9,6 +9,7 @@ import android.view.WindowManager
 import com.google.gson.Gson
 import dagger.hilt.android.qualifiers.ApplicationContext
 import org.webrtc.*
+import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -19,12 +20,15 @@ class WebRTCClient @Inject constructor(
 ) {
     //class variables
     var listener: WebRTCClientListener? = null
-    private lateinit var participantId: String
+
+    var localId = Instant.now().toString()
 
     //webrtc variables
     private val eglBaseContext = EglBase.create().eglBaseContext
     private val peerConnectionFactory by lazy { createPeerConnectionFactory() }
-    private var peerConnection: PeerConnection? = null
+//    private var peerConnection: PeerConnection? = null
+
+    private var peerConnectionList:MutableMap<String,PeerConnection> = mutableMapOf()
 
     // Creating a STUN server
     private val stunServer: PeerConnection.IceServer = PeerConnection.IceServer
@@ -98,10 +102,13 @@ class WebRTCClient @Inject constructor(
         participantId: String, observer: PeerConnection.Observer
     ) {
         println("initializeWebrtcClient >>> $participantId")
-        this.participantId = participantId
         localTrackId = "${participantId}_track"
         localStreamId = "${participantId}_stream"
-        peerConnection = createPeerConnection(observer)
+        val peerConnection = createPeerConnection(observer)
+        localId = participantId
+        peerConnection?.let {
+            peerConnectionList[localId] = it
+        }
     }
 
     private fun createPeerConnection(observer: PeerConnection.Observer): PeerConnection? {
@@ -109,7 +116,8 @@ class WebRTCClient @Inject constructor(
     }
 
     //negotiation section
-    fun call(target:String){
+    fun call(participantId:String,target:String){
+        val peerConnection = peerConnectionList[localId]
         peerConnection?.createOffer(object : MySdpObserver() {
             override fun onCreateSuccess(desc: SessionDescription?) {
                 super.onCreateSuccess(desc)
@@ -139,8 +147,9 @@ class WebRTCClient @Inject constructor(
         },mediaConstraint)
     }
 
-    fun answer(target:String){
+    fun answer(participantId: String,target:String){
         println("initializeWebrtcClient onCreateSuccess >>participantId>answer>$participantId >>>$target")
+        val peerConnection = peerConnectionList[localId]
         peerConnection?.createAnswer(object : MySdpObserver() {
             override fun onCreateSuccess(desc: SessionDescription?) {
                 super.onCreateSuccess(desc)
@@ -162,16 +171,16 @@ class WebRTCClient @Inject constructor(
         },mediaConstraint)
     }
 
-    fun onRemoteSessionReceived(sessionDescription: SessionDescription){
-        peerConnection?.setRemoteDescription(MySdpObserver(),sessionDescription)
+    fun onRemoteSessionReceived(participantId: String,sessionDescription: SessionDescription){
+        peerConnectionList[localId]?.setRemoteDescription(MySdpObserver(),sessionDescription)
     }
 
-    fun addIceCandidateToPeer(iceCandidate: IceCandidate){
-        peerConnection?.addIceCandidate(iceCandidate)
+    fun addIceCandidateToPeer(participantId:String,iceCandidate: IceCandidate){
+        peerConnectionList[localId]?.addIceCandidate(iceCandidate)
     }
 
-    fun sendIceCandidate(target: String,iceCandidate: IceCandidate){
-        addIceCandidateToPeer(iceCandidate)
+    fun sendIceCandidate(participantId: String,target: String,iceCandidate: IceCandidate){
+        addIceCandidateToPeer(participantId,iceCandidate)
         listener?.onTransferEventToSocket(
             DataModel(
                 type = DataModelType.IceCandidates,
@@ -187,7 +196,7 @@ class WebRTCClient @Inject constructor(
             videoCapture.dispose()
             screenCapture?.dispose()
             localStream?.dispose()
-            peerConnection?.close()
+            peerConnectionList[localId]?.close()
         }catch (e:Exception){
             e.printStackTrace()
         }
@@ -229,12 +238,15 @@ class WebRTCClient @Inject constructor(
         this.remoteSurfaceView = view
         initSurfaceView(view)
     }
-    fun initLocalSurfaceView(localView: SurfaceViewRenderer, isVideoCall: Boolean) {
+    fun initLocalSurfaceView(userId:String,localView: SurfaceViewRenderer, isVideoCall: Boolean) {
         this.localSurfaceView = localView
         initSurfaceView(localView)
-        startLocalStreaming(localView, isVideoCall)
+        startLocalStreaming(userId,localView, isVideoCall)
     }
-    private fun startLocalStreaming(localView: SurfaceViewRenderer, isVideoCall: Boolean) {
+    private fun startLocalStreaming(userId:String,localView: SurfaceViewRenderer, isVideoCall: Boolean) {
+
+        println("startLocalStreaming >>>> $userId")
+
         localStream = peerConnectionFactory.createLocalMediaStream(localStreamId)
         if (isVideoCall){
             startCapturingCamera(localView)
@@ -242,7 +254,7 @@ class WebRTCClient @Inject constructor(
 
         localAudioTrack = peerConnectionFactory.createAudioTrack(localTrackId+"_audio",localAudioSource)
         localStream?.addTrack(localAudioTrack)
-        peerConnection?.addStream(localStream)
+        peerConnectionList[localId]?.addStream(localStream)
     }
     private fun startCapturingCamera(localView: SurfaceViewRenderer){
         surfaceTextureHelper = SurfaceTextureHelper.create(
@@ -306,7 +318,7 @@ class WebRTCClient @Inject constructor(
             peerConnectionFactory.createVideoTrack(localTrackId+"_video",localScreenVideoSource)
         localScreenShareVideoTrack?.addSink(localSurfaceView)
         localStream?.addTrack(localScreenShareVideoTrack)
-        peerConnection?.addStream(localStream)
+//        peerConnection?.addStream(localStream)
 
     }
 

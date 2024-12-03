@@ -12,19 +12,19 @@ import java.time.Instant
 
 class VideoCallAdapter(
     val isRemoteView:Boolean = false,
-    val bindCallToWebClient:(SurfaceViewRenderer)->Unit
+    val bindCallToWebClient:(String,SurfaceViewRenderer)->Unit
 ) : ListAdapter<VideoCallData, VideoCallAdapter.ViewHolder>(DIFFER_VIDEO_CALL){
 
     inner class ViewHolder(private val binding:VideoRemoteSurfaceViewBinding):RecyclerView.ViewHolder(binding.root) {
         fun bind(data: VideoCallData){
             if (isRemoteView){
                 if (data.isActivate){
-                    bindCallToWebClient.invoke(binding.remoteView)
+                    bindCallToWebClient.invoke(data.userId,binding.remoteView)
                     data.mediaStream?.addSink(binding.remoteView)
                 }
             }
             else{
-                bindCallToWebClient.invoke(binding.remoteView)
+                bindCallToWebClient.invoke(data.userId,binding.remoteView)
             }
 //            binding.remoteView.init(data.eglContext, null)
             // Bind the remote video stream to the SurfaceViewRenderer

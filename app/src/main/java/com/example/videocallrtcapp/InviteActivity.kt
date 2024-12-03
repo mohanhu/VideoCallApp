@@ -53,8 +53,8 @@ class InviteActivity : AppCompatActivity() {
         }
 
         binding.evKannanId.setOnClickListener {
-            userName ="Naveen"
-            videoCallRepository.setMeetingRoomId("Naveen",UserStatus.ONLINE){}
+            userName ="Kannan"
+            videoCallRepository.setMeetingRoomId("Kannan",UserStatus.ONLINE){}
         }
 
         binding.joinMeeting.setOnClickListener {
