@@ -109,9 +109,6 @@ class VideoCallRepository @Inject constructor(
             if (whoAvailable.isNotEmpty()) {
                 CoroutineScope(Dispatchers.IO).launch {
                     whoAvailable.forEach { user ->
-                       withContext(Dispatchers.Main){
-                           setWebInit(user.deviceId)
-                       }
                         try {
                             // Only one sendConnectionRequest might be needed in certain use cases
                             sendConnectionRequest(userName = userId, targetName = user.deviceId) {
@@ -130,13 +127,14 @@ class VideoCallRepository @Inject constructor(
                     }
                 }
             } else {
-                setWebInit(userId, isOwnUser = true)
                 println("No available users found.")
             }
         }
     }
 
     fun setWebInit(userName: String,isOwnUser:Boolean = false) {
+
+        println("initializeWebrtcClient >>> 3.0 >>>setWebInit >>$userName")
         webRTCClient.listener = this
         webRTCClient.initializeWebrtcClient(participantId = userName, object : MyPeerObserver() {
 
@@ -167,18 +165,10 @@ class VideoCallRepository @Inject constructor(
             override fun onIceCandidate(p0: IceCandidate?) {
                 super.onIceCandidate(p0)
                 p0?.let {
-                   if (isOwnUser){
-                       firebaseClient.findTargetName(userName){target->
-                           println("initializeWebrtcClient onIceCandidate >>> $target")
-                           webRTCClient.sendIceCandidate(userName,target, it)
-                       }
-                   }
-                   else{
-                       firebaseClient.findTargetName(userName){target->
-                           println("initializeWebrtcClient onIceCandidate >>> $target")
-                           webRTCClient.sendIceCandidate(participantId = target, target = userName, iceCandidate = it)
-                       }
-                   }
+                    firebaseClient.findTargetName(userName){target->
+                        println("initializeWebrtcClient onIceCandidate >>$userName> $target")
+                        webRTCClient.sendIceCandidate(userName,target, it)
+                    }
                 }
             }
 

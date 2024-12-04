@@ -19,18 +19,13 @@ class WebRTCClient @Inject constructor(
     private val gson: Gson,
 ) {
     //class variables
-
     var listener: WebRTCClientListener? = null
 
     var localId = Instant.now().toString()
 
-
-
-
     //webrtc variables
     private val eglBaseContext = EglBase.create().eglBaseContext
     private val peerConnectionFactory by lazy { createPeerConnectionFactory() }
-//    private var peerConnection: PeerConnection? = null
 
     private var peerConnectionList:MutableMap<String,PeerConnection> = mutableMapOf()
 
@@ -105,11 +100,10 @@ class WebRTCClient @Inject constructor(
     fun initializeWebrtcClient(
         participantId: String, observer: PeerConnection.Observer
     ) {
-        println("initializeWebrtcClient >>> $participantId")
+        println("initializeWebrtcClient >version 3.0 start>> $participantId")
         localTrackId = "${participantId}_track"
         localStreamId = "${participantId}_stream"
         val peerConnection = createPeerConnection(observer)
-        localId = participantId
         peerConnection?.let {
             peerConnectionList[localId] = it
         }
@@ -120,7 +114,8 @@ class WebRTCClient @Inject constructor(
     }
 
     //negotiation section
-    fun call(participantId:String,target:String){
+    fun call(userId:String,target:String){
+        println("initializeWebrtcClient >version 3.0 call>> $target>>>$peerConnectionList")
         val peerConnection = peerConnectionList[localId]
         peerConnection?.createOffer(object : MySdpObserver() {
             override fun onCreateSuccess(desc: SessionDescription?) {
@@ -128,10 +123,10 @@ class WebRTCClient @Inject constructor(
                 peerConnection?.setLocalDescription(object : MySdpObserver() {
                     override fun onSetSuccess() {
                         super.onSetSuccess()
-                        println("checkUserListWhoOneAddNew Firebase 0 >>User>offer called>user>>>$participantId>>>$target")
+                        println("initializeWebrtcClient Firebase 0 >>User>offer called>user>>>$userId>>>$target")
                         listener?.onTransferEventToSocket(
                             DataModel(type = DataModelType.Offer,
-                                sender = participantId,
+                                sender = userId,
                                 target = target,
                                 data = desc?.description)
                         )
@@ -151,8 +146,9 @@ class WebRTCClient @Inject constructor(
         },mediaConstraint)
     }
 
-    fun answer(participantId: String,target:String){
-        println("initializeWebrtcClient onCreateSuccess >>participantId>answer>$participantId >>>$target")
+    fun answer(userId: String,target:String){
+        println("initializeWebrtcClient >version 3.0 answer>> $userId")
+        println("initializeWebrtcClient onCreateSuccess >>participantId>answer>$userId >>>$peerConnectionList")
         val peerConnection = peerConnectionList[localId]
         peerConnection?.createAnswer(object : MySdpObserver() {
             override fun onCreateSuccess(desc: SessionDescription?) {
@@ -164,7 +160,7 @@ class WebRTCClient @Inject constructor(
                         listener?.onTransferEventToSocket(
                             DataModel(
                                 type = DataModelType.Answer,
-                                sender = participantId,
+                                sender = userId,
                                 target = target,
                                 data = desc?.description
                             )
@@ -176,15 +172,18 @@ class WebRTCClient @Inject constructor(
     }
 
     fun onRemoteSessionReceived(participantId: String,sessionDescription: SessionDescription){
+        println("initializeWebrtcClient >version 3.0 remotereceived>> $participantId")
         peerConnectionList[localId]?.setRemoteDescription(MySdpObserver(),sessionDescription)
     }
 
     fun addIceCandidateToPeer(participantId:String,iceCandidate: IceCandidate){
+        println("initializeWebrtcClient >version 3.0 remoteroffer>> $participantId")
         peerConnectionList[localId]?.addIceCandidate(iceCandidate)
     }
 
     fun sendIceCandidate(participantId: String,target: String,iceCandidate: IceCandidate){
         addIceCandidateToPeer(participantId,iceCandidate)
+        println("initializeWebrtcClient >version 3.0 Ice state>> $participantId")
         listener?.onTransferEventToSocket(
             DataModel(
                 type = DataModelType.IceCandidates,
@@ -249,7 +248,7 @@ class WebRTCClient @Inject constructor(
     }
     private fun startLocalStreaming(userId:String,localView: SurfaceViewRenderer, isVideoCall: Boolean) {
 
-        println("startLocalStreaming >>>> $userId")
+        println("initializeWebrtcClient >version 3.0 local stream >>>> $userId")
 
         localStream = peerConnectionFactory.createLocalMediaStream(localStreamId)
         if (isVideoCall){

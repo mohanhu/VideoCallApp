@@ -54,7 +54,7 @@ class VideoCallService @Inject constructor(
     private fun startServiceWithNotification(intent: Intent) {
         val userName = intent.getStringExtra("userName")?:""
 
-//        videoCallRepository.setWebInit(userName)
+        videoCallRepository.setWebInit(userName)
         videoCallRepository.checkUserDetailsCall()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
