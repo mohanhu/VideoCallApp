@@ -10,6 +10,7 @@ import androidx.lifecycle.lifecycleScope
 import com.example.videocallrtcapp.databinding.ActivityInviteBinding
 import com.example.videocallrtcapp.oneToOne.OnePointcall.ServiceCallRepository
 import com.example.videocallrtcapp.oneToOne.OnePointcall.VideoCallRepository
+import com.example.videocallrtcapp.oneToOne.OnePointcall.presentation.VideoCallActivity
 import com.example.videocallrtcapp.oneToOne.OnePointcall.webrtc.UserStatus
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.CoroutineScope
@@ -26,9 +27,6 @@ class InviteActivity : AppCompatActivity() {
 
     @Inject
     lateinit var videoCallRepository: VideoCallRepository
-
-    lateinit var job:Job
-    var currentSecond = 0
 
     @Inject
     lateinit var serviceCallRepository: ServiceCallRepository
@@ -59,16 +57,11 @@ class InviteActivity : AppCompatActivity() {
 
         binding.joinMeeting.setOnClickListener {
            lifecycleScope.launch {
-               serviceCallRepository.startService(meetingId = userName)
-               videoCallRepository.createPeerConnectionInit(userName = userName)
-               startActivity(Intent(this@InviteActivity,MainActivity::class.java).apply {
+               startActivity(Intent(this@InviteActivity,VideoCallActivity::class.java).apply {
                    putExtra("userName",userName)
                })
            }
         }
-
-        listUpdates()
-
 
 //        binding.createMeeting.setOnClickListener {
 //            videoCallRepository.setMeetingRoomId(userName){
@@ -84,18 +77,18 @@ class InviteActivity : AppCompatActivity() {
 //        }
     }
 
-    private fun listUpdates() {
-        if (currentSecond>20){
-            job.cancel()
-            return
-        }
-        job = CoroutineScope(Dispatchers.IO).launch {
-            println("List refresh between each 5 seconds>>>>$currentSecond")
-            delay(5000)
-            currentSecond+=5
-            listUpdates()
-        }
-    }
+//    private fun listUpdates() {
+//        if (currentSecond>20){
+//            job.cancel()
+//            return
+//        }
+//        job = CoroutineScope(Dispatchers.IO).launch {
+//            println("List refresh between each 5 seconds>>>>$currentSecond")
+//            delay(5000)
+//            currentSecond+=5
+//            listUpdates()
+//        }
+//    }
 
     override fun onStop() {
         super.onStop()

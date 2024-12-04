@@ -6,7 +6,11 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.example.videocallrtcapp.databinding.VideoRemoteSurfaceViewBinding
+import org.webrtc.EglBase
+import org.webrtc.RendererCommon
 import org.webrtc.SurfaceViewRenderer
+import org.webrtc.VideoFrame
+import org.webrtc.VideoSink
 import org.webrtc.VideoTrack
 import java.time.Instant
 
@@ -15,20 +19,26 @@ class VideoCallAdapter(
     val bindCallToWebClient:(String,SurfaceViewRenderer)->Unit
 ) : ListAdapter<VideoCallData, VideoCallAdapter.ViewHolder>(DIFFER_VIDEO_CALL){
 
+    val eglBase: EglBase = EglBase.create()
+
     inner class ViewHolder(private val binding:VideoRemoteSurfaceViewBinding):RecyclerView.ViewHolder(binding.root) {
         fun bind(data: VideoCallData){
-            if (isRemoteView){
-                if (data.isActivate){
-                    bindCallToWebClient.invoke(data.userId,binding.remoteView)
-                    data.mediaStream?.addSink(binding.remoteView)
+            if (isRemoteView) {
+                if (data.isActivate && data.mediaStream != null) {
+                    binding.remoteView.run {
+                        // Initialize if not done
+                        init(eglBase.eglBaseContext, null)
+                        setEnableHardwareScaler(true)
+                        setMirror(false)
+
+                        // Attach the media stream (VideoTrack)
+                        data.mediaStream.addSink(this)
+                    }
                 }
             }
             else{
                 bindCallToWebClient.invoke(data.userId,binding.remoteView)
             }
-//            binding.remoteView.init(data.eglContext, null)
-            // Bind the remote video stream to the SurfaceViewRenderer
-//            data.mediaStream?.videoTracks?.get(0)?.addSink(binding.remoteView)
         }
     }
 
@@ -38,6 +48,10 @@ class VideoCallAdapter(
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
         holder.bind(getItem(position))
+    }
+
+    override fun onViewRecycled(holder: ViewHolder) {
+        super.onViewRecycled(holder)
     }
 }
 

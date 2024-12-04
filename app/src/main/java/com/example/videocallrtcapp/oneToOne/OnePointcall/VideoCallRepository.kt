@@ -103,30 +103,10 @@ class VideoCallRepository @Inject constructor(
         }
     }
 
-    fun checkUserListWhoOneAddNew() {
+    fun checkUserListWhoOneAddNew(userList : (user:String,List<UserDetails>)->Unit) {
         firebaseClient.checkUserListWhoOneAddNew { userId, whoAvailable ->
             println("checkUserListWhoOneAddNew Firebase 0 >>User>>$userId")
-            if (whoAvailable.isNotEmpty()) {
-                whoAvailable.forEach { user ->
-                    try {
-                        // Only one sendConnectionRequest might be needed in certain use cases
-                        sendConnectionRequest(userName = userId, targetName = user.deviceId) {
-                            // Handle callback if needed
-                        }
-                        // If both directions are needed, keep both requests
-                        sendConnectionRequest(userName = user.deviceId, targetName = userId) {
-                            // Handle callback if needed
-                        }
-
-                        startCall(userId, user.deviceId)
-                    } catch (e: Exception) {
-                        // Log or handle the exception properly
-                        e.printStackTrace()
-                    }
-                }
-            } else {
-                println("No available users found.")
-            }
+            userList.invoke(userId,whoAvailable)
         }
     }
 
@@ -163,7 +143,7 @@ class VideoCallRepository @Inject constructor(
                     p0?.let {
                         firebaseClient.findTargetName(userName){target->
                             println("initializeWebrtcClient onIceCandidate >>$userName> $target")
-                            webRTCClient.sendIceCandidate(userName,target, it)
+                            webRTCClient.sendIceCandidate(userName,target.target, it)
                         }
                     }
                 }
@@ -196,7 +176,7 @@ class VideoCallRepository @Inject constructor(
         this.remoteSurfaceView = view
     }
 
-    private fun startCall(userName: String, target:String) {
+    fun startCall(userName: String, target:String) {
         webRTCClient.call(userName,target)
     }
 

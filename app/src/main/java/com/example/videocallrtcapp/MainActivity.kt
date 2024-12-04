@@ -61,6 +61,36 @@ class MainActivity : AppCompatActivity() {
             finish()
         }
 
+        videoCallRepository.checkUserListWhoOneAddNew { userId, userDetails ->
+            println("videoCallRepository.checkUserListWhoOneAddNew >>>$userId>>>$userDetails")
+            if (userDetails.isNotEmpty()) {
+                CoroutineScope(Dispatchers.Default).launch {
+                    userDetails.map { user ->
+                        videoCallRepository.createPeerConnectionInit(userName = user.deviceId)
+                        try {
+                            delay(2000)
+                            // Only one sendConnectionRequest might be needed in certain use cases
+                            videoCallRepository.sendConnectionRequest(userName = userName, targetName = user.deviceId) {
+                                // Handle callback if needed
+                            }
+                            // If both directions are needed, keep both requests
+                            videoCallRepository.sendConnectionRequest(userName = user.deviceId, targetName = userName) {
+                                // Handle callback if needed
+                            }
+                            delay(5000)
+
+                            videoCallRepository.startCall(userName, user.deviceId)
+                        } catch (e: Exception) {
+                            // Log or handle the exception properly
+                            e.printStackTrace()
+                        }
+                    }
+                }
+            } else {
+                videoCallRepository.createPeerConnectionInit(userName = userName)
+                println("No available users found.")
+            }
+        }
         println("MainActivity all data >>>$userName")
 
         binding.apply {
@@ -76,7 +106,6 @@ class MainActivity : AppCompatActivity() {
             }
 
            lifecycleScope.launch {
-               delay(2000)
                bindLocalView()
                delay(5000)
                bindRemoteView()

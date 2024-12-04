@@ -50,7 +50,6 @@ class VideoCallService @Inject constructor(
     private fun handleUiSetup(intent: Intent) {
 //        val userName = intent.getStringExtra("userName")
 //        videoCallRepository.startCall()
-        videoCallRepository.checkUserListWhoOneAddNew()
     }
 
     private fun startServiceWithNotification(intent: Intent) {

@@ -37,14 +37,14 @@ class FirebaseClient @Inject constructor(
         }
     }
 
-    fun findTargetName(userName: String,target:(String)->Unit) {
+    fun findTargetName(userName: String,target:(DataModel)->Unit) {
         dbRef.child(USER_TABLE).child(userName).get().addOnCompleteListener {
 //            try {
                 val user = it.result.getValue(UserDetails::class.java)
                 println("initializeWebrtcClient findTargetName $userName >>>>${it.result}")
                 println("initializeWebrtcClient findTargetName $userName >>>>$user")
                 val latest = gson.fromJson(user?.latestEvent.toString(), DataModel::class.java)
-                target.invoke(latest.sender)
+                target.invoke(latest)
 //            }
 //            catch (e:Exception){}
         }
@@ -67,7 +67,6 @@ class FirebaseClient @Inject constructor(
             }
             println("checkUserListWhoOneAddNew status >>>$userId> $userDetails")
             if (userDetails.isEmpty() || !snap.result.exists()){
-                userList.invoke(userId, listOf())
                 dbRef.child(USER_TABLE).child(userId).child("userStatus")
                     .setValue(UserStatus.IN_CALL)
                     .addOnCompleteListener {  }
