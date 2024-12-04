@@ -132,7 +132,7 @@ class VideoCallRepository @Inject constructor(
         }
     }
 
-    fun setWebInit(userName: String,isOwnUser:Boolean = false) {
+    fun setWebInit(userName: String) {
 
         println("initializeWebrtcClient >>> 3.0 >>>setWebInit >>$userName")
         webRTCClient.listener = this
