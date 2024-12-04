@@ -27,6 +27,7 @@ import org.webrtc.MediaStreamTrack
 import org.webrtc.PeerConnection
 import org.webrtc.SessionDescription
 import org.webrtc.SurfaceViewRenderer
+import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -105,25 +106,22 @@ class VideoCallRepository @Inject constructor(
     fun checkUserListWhoOneAddNew() {
         firebaseClient.checkUserListWhoOneAddNew { userId, whoAvailable ->
             println("checkUserListWhoOneAddNew Firebase 0 >>User>>$userId")
-
             if (whoAvailable.isNotEmpty()) {
-                CoroutineScope(Dispatchers.IO).launch {
-                    whoAvailable.forEach { user ->
-                        try {
-                            // Only one sendConnectionRequest might be needed in certain use cases
-                            sendConnectionRequest(userName = userId, targetName = user.deviceId) {
-                                // Handle callback if needed
-                            }
-                            // If both directions are needed, keep both requests
-                            sendConnectionRequest(userName = user.deviceId, targetName = userId) {
-                                // Handle callback if needed
-                            }
-
-                            startCall(userId, user.deviceId)
-                        } catch (e: Exception) {
-                            // Log or handle the exception properly
-                            e.printStackTrace()
+                whoAvailable.forEach { user ->
+                    try {
+                        // Only one sendConnectionRequest might be needed in certain use cases
+                        sendConnectionRequest(userName = userId, targetName = user.deviceId) {
+                            // Handle callback if needed
                         }
+                        // If both directions are needed, keep both requests
+                        sendConnectionRequest(userName = user.deviceId, targetName = userId) {
+                            // Handle callback if needed
+                        }
+
+                        startCall(userId, user.deviceId)
+                    } catch (e: Exception) {
+                        // Log or handle the exception properly
+                        e.printStackTrace()
                     }
                 }
             } else {
@@ -132,58 +130,61 @@ class VideoCallRepository @Inject constructor(
         }
     }
 
-    fun setWebInit(userName: String) {
+    fun createPeerConnectionInit(userName: String) {
+        webRTCClient.createPeerConnection(
+            object : MyPeerObserver() {
 
-        println("initializeWebrtcClient >>> 3.0 >>>setWebInit >>$userName")
-        webRTCClient.listener = this
-        webRTCClient.initializeWebrtcClient(participantId = userName, object : MyPeerObserver() {
+                override fun onAddStream(p0: MediaStream?) {
+                    super.onAddStream(p0)
+                    println("webRTCClient.initializeWebrtcClient >>>>$p0>")
+                    try {
+                        val pId = p0?.id?.split('_')?.first()
+                        val pState = p0?.videoTracks?.get(0)?.state()
+                        pId?.let {
+                            _uiState.value.map { state->
+                                if (state.userId == pId && (state.mediaStream ?: MediaStreamTrack.State.LIVE) == MediaStreamTrack.State.LIVE
+                                ){
+                                    state.copy(mediaStream = p0.videoTracks.get(0), isActivate = true)
+                                }
+                                else{
+                                    state.copy(isActivate = false)
+                                }
+                            }.also { data->
+                                _uiState.value = data
+                            }
+                        }
+                    }catch (e:Exception){
+                        e.printStackTrace()
+                    }
+                }
 
-            override fun onAddStream(p0: MediaStream?) {
-                super.onAddStream(p0)
-                println("webRTCClient.initializeWebrtcClient >>>>$p0>")
-                try {
-                    val pId = p0?.id?.split('_')?.first()
-                    val pState = p0?.videoTracks?.get(0)?.state()
-                    pId?.let {
-                        _uiState.value.map { state->
-                            if (state.userId == pId && (state.mediaStream ?: MediaStreamTrack.State.LIVE) == MediaStreamTrack.State.LIVE
-                            ){
-                                state.copy(mediaStream = p0.videoTracks.get(0), isActivate = true)
-                            }
-                            else{
-                                state.copy(isActivate = false)
-                            }
-                        }.also { data->
-                            _uiState.value = data
+                override fun onIceCandidate(p0: IceCandidate?) {
+                    super.onIceCandidate(p0)
+                    p0?.let {
+                        firebaseClient.findTargetName(userName){target->
+                            println("initializeWebrtcClient onIceCandidate >>$userName> $target")
+                            webRTCClient.sendIceCandidate(userName,target, it)
                         }
                     }
-                }catch (e:Exception){
-                    e.printStackTrace()
                 }
-            }
 
-            override fun onIceCandidate(p0: IceCandidate?) {
-                super.onIceCandidate(p0)
-                p0?.let {
-                    firebaseClient.findTargetName(userName){target->
-                        println("initializeWebrtcClient onIceCandidate >>$userName> $target")
-                        webRTCClient.sendIceCandidate(userName,target, it)
+                override fun onConnectionChange(newState: PeerConnection.PeerConnectionState?) {
+                    super.onConnectionChange(newState)
+                    if (newState == PeerConnection.PeerConnectionState.CONNECTED) {
+                        // 1. change my status to in call
+                        firebaseClient.setMeetingRoomId(userName,UserStatus.IN_CALL){}
+//                     2. clear latest event inside my user section in firebase database
+                        clearLatestEvent(userName)
                     }
                 }
             }
+        )
+    }
 
-            override fun onConnectionChange(newState: PeerConnection.PeerConnectionState?) {
-                super.onConnectionChange(newState)
-                if (newState == PeerConnection.PeerConnectionState.CONNECTED) {
-                    // 1. change my status to in call
-                    firebaseClient.setMeetingRoomId(userName,UserStatus.IN_CALL){}
-//                     2. clear latest event inside my user section in firebase database
-                    clearLatestEvent(userName)
-                }
-
-
-            }
-        })
+    fun setWebInit(userName: String) {
+        println("initializeWebrtcClient >>> 3.0 >>>setWebInit >>$userName")
+        webRTCClient.listener = this
+        webRTCClient.initializeWebrtcClient(participantId = userName)
     }
 
     fun initLocalSurfaceView(userId:String,view: SurfaceViewRenderer, isVideoCall: Boolean) {

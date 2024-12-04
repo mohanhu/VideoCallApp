@@ -60,7 +60,7 @@ class InviteActivity : AppCompatActivity() {
         binding.joinMeeting.setOnClickListener {
            lifecycleScope.launch {
                serviceCallRepository.startService(meetingId = userName)
-               videoCallRepository.checkUserListWhoOneAddNew()
+               videoCallRepository.createPeerConnectionInit(userName = userName)
                startActivity(Intent(this@InviteActivity,MainActivity::class.java).apply {
                    putExtra("userName",userName)
                })

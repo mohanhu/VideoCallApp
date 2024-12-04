@@ -10,6 +10,7 @@ import androidx.core.app.NotificationCompat
 import com.example.videocallrtcapp.oneToOne.OnePointcall.di.NOTIFICATION_CHANNEL_ID
 import com.example.videocallrtcapp.oneToOne.OnePointcall.VideoCallRepository
 import dagger.hilt.android.AndroidEntryPoint
+import java.time.Instant
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -47,8 +48,9 @@ class VideoCallService @Inject constructor(
     }
 
     private fun handleUiSetup(intent: Intent) {
-        val userName = intent.getStringExtra("userName")
+//        val userName = intent.getStringExtra("userName")
 //        videoCallRepository.startCall()
+        videoCallRepository.checkUserListWhoOneAddNew()
     }
 
     private fun startServiceWithNotification(intent: Intent) {

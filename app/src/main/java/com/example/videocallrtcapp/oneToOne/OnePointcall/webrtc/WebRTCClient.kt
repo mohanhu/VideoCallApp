@@ -98,19 +98,18 @@ class WebRTCClient @Inject constructor(
     }
 
     fun initializeWebrtcClient(
-        participantId: String, observer: PeerConnection.Observer
+        participantId: String
     ) {
         println("initializeWebrtcClient >version 3.0 start>> $participantId")
         localTrackId = "${participantId}_track"
         localStreamId = "${participantId}_stream"
-        val peerConnection = createPeerConnection(observer)
+    }
+
+    fun createPeerConnection(observer: PeerConnection.Observer) {
+        val peerConnection = peerConnectionFactory.createPeerConnection(iceServers, observer)
         peerConnection?.let {
             peerConnectionList[localId] = it
         }
-    }
-
-    private fun createPeerConnection(observer: PeerConnection.Observer): PeerConnection? {
-        return peerConnectionFactory.createPeerConnection(iceServers, observer)
     }
 
     //negotiation section
@@ -205,30 +204,6 @@ class WebRTCClient @Inject constructor(
         }
     }
 
-    fun switchCamera(){
-        videoCapture.switchCamera(null)
-    }
-
-    fun toggleAudio(shouldBeMuted:Boolean){
-        if (shouldBeMuted){
-            localStream?.removeTrack(localAudioTrack)
-        }else{
-            localStream?.addTrack(localAudioTrack)
-        }
-    }
-
-    fun toggleVideo(shouldBeMuted: Boolean){
-        try {
-            if (shouldBeMuted){
-                stopCapturingCamera()
-            }else{
-                startCapturingCamera(localSurfaceView)
-            }
-        }catch (e:Exception){
-            e.printStackTrace()
-        }
-    }
-
     //streaming section
     private fun initSurfaceView(view: SurfaceViewRenderer) {
         view.run {
@@ -293,56 +268,6 @@ class WebRTCClient @Inject constructor(
         localVideoTrack?.dispose()
     }
 
-    //screen capture section
-
-    fun setPermissionIntent(screenPermissionIntent: Intent) {
-        this.permissionIntent = screenPermissionIntent
-    }
-
-    fun startScreenCapturing() {
-        val displayMetrics = DisplayMetrics()
-        val windowsManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
-        windowsManager.defaultDisplay.getMetrics(displayMetrics)
-
-        val screenWidthPixels = displayMetrics.widthPixels
-        val screenHeightPixels = displayMetrics.heightPixels
-
-        val surfaceTextureHelper = SurfaceTextureHelper.create(
-            Thread.currentThread().name,eglBaseContext
-        )
-
-        screenCapture = createScreenCapturer()
-        screenCapture!!.initialize(
-            surfaceTextureHelper,context,localScreenVideoSource.capturerObserver
-        )
-        screenCapture!!.startCapture(screenWidthPixels,screenHeightPixels,15)
-
-        localScreenShareVideoTrack =
-            peerConnectionFactory.createVideoTrack(localTrackId+"_video",localScreenVideoSource)
-        localScreenShareVideoTrack?.addSink(localSurfaceView)
-        localStream?.addTrack(localScreenShareVideoTrack)
-//        peerConnection?.addStream(localStream)
-
-    }
-
-    fun stopScreenCapturing() {
-        screenCapture?.stopCapture()
-        screenCapture?.dispose()
-        localScreenShareVideoTrack?.removeSink(localSurfaceView)
-        localSurfaceView.clearImage()
-        localStream?.removeTrack(localScreenShareVideoTrack)
-        localScreenShareVideoTrack?.dispose()
-
-    }
-
-    private fun createScreenCapturer():VideoCapturer {
-        return ScreenCapturerAndroid(permissionIntent, object : MediaProjection.Callback() {
-            override fun onStop() {
-                super.onStop()
-                Log.d("permissions", "onStop: permission of screen casting is stopped")
-            }
-        })
-    }
     interface WebRTCClientListener {
         fun onTransferEventToSocket(data: DataModel)
     }

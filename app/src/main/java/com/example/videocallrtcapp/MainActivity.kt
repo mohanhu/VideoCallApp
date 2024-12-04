@@ -64,7 +64,7 @@ class MainActivity : AppCompatActivity() {
         println("MainActivity all data >>>$userName")
 
         binding.apply {
-            callTitleTv.text = "Meeting Room : 123r56367"
+            callTitleTv.text = "Meeting Room : 123"
             CoroutineScope(Dispatchers.IO).launch {
                 for (i in 0..3600){
                     delay(1000)
@@ -75,9 +75,9 @@ class MainActivity : AppCompatActivity() {
                 }
             }
 
-            bindLocalView()
-
            lifecycleScope.launch {
+               delay(2000)
+               bindLocalView()
                delay(5000)
                bindRemoteView()
                serviceCallRepository.setupViews(

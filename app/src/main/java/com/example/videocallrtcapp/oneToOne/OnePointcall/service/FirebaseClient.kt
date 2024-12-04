@@ -63,9 +63,11 @@ class FirebaseClient @Inject constructor(
                 userDetails = userDetails.filter { it.deviceId != userId }
                     .filter { it.userStatus == UserStatus.IN_CALL }.toMutableList()
                 userList.invoke(userId,userDetails)
-            }catch (_:Exception){}
+            }catch (_:Exception){
+            }
             println("checkUserListWhoOneAddNew status >>>$userId> $userDetails")
             if (userDetails.isEmpty() || !snap.result.exists()){
+                userList.invoke(userId, listOf())
                 dbRef.child(USER_TABLE).child(userId).child("userStatus")
                     .setValue(UserStatus.IN_CALL)
                     .addOnCompleteListener {  }
