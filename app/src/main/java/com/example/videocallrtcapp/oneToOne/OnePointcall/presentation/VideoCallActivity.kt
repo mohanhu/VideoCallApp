@@ -1,18 +1,14 @@
 package com.example.videocallrtcapp.oneToOne.OnePointcall.presentation
 
+import android.content.Context
 import android.os.Bundle
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
-import androidx.recyclerview.widget.LinearLayoutManager
-import com.example.videocallrtcapp.databinding.ActivityMainBinding
 import com.example.videocallrtcapp.databinding.ActivityVideoCallBinding
 import com.example.videocallrtcapp.oneToOne.OnePointcall.service.FirebaseClient
 import com.example.videocallrtcapp.oneToOne.OnePointcall.webrtc.DataModel
 import com.example.videocallrtcapp.oneToOne.OnePointcall.webrtc.DataModelType
-import com.example.videocallrtcapp.oneToOne.OnePointcall.webrtc.MySdpObserver
+import com.example.videocallrtcapp.oneToOne.OnePointcall.webrtc.MyPeerObserver
 import com.example.videocallrtcapp.oneToOne.OnePointcall.webrtc.USER_TABLE
 import com.example.videocallrtcapp.oneToOne.OnePointcall.webrtc.UserStatus
 import com.google.firebase.database.DatabaseReference
@@ -20,11 +16,9 @@ import com.google.gson.Gson
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
 import org.webrtc.AudioTrack
-import org.webrtc.Camera1Enumerator
-import org.webrtc.CameraEnumerator
+import org.webrtc.Camera2Enumerator
+import org.webrtc.CameraVideoCapturer
 import org.webrtc.DataChannel
 import org.webrtc.DefaultVideoDecoderFactory
 import org.webrtc.DefaultVideoEncoderFactory
@@ -33,7 +27,6 @@ import org.webrtc.IceCandidate
 import org.webrtc.Logging
 import org.webrtc.MediaConstraints
 import org.webrtc.MediaStream
-import org.webrtc.MediaStreamTrack
 import org.webrtc.PeerConnection
 import org.webrtc.PeerConnectionFactory
 import org.webrtc.RtpReceiver
@@ -43,7 +36,6 @@ import org.webrtc.SurfaceTextureHelper
 import org.webrtc.SurfaceViewRenderer
 import org.webrtc.VideoCapturer
 import org.webrtc.VideoTrack
-import java.time.Instant
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -60,6 +52,20 @@ class VideoCallActivity : AppCompatActivity() {
 
     lateinit var user :String
 
+    // Creating a STUN server
+    val stunServer: PeerConnection.IceServer = PeerConnection.IceServer
+        .builder("stun:stun4.l.google.com:19302")
+        .createIceServer()
+
+    // Creating a TURN server with credentials
+    val turnServer: PeerConnection.IceServer = PeerConnection.IceServer
+        .builder("turn:a.relay.metered.ca:443?transport=tcp")
+        .setUsername("83eebabf8b4cce9d5dbcb649")
+        .setPassword("2D7JvfkOQtBdYW3R")
+        .createIceServer()
+
+    val iceServers = listOf(stunServer,turnServer)
+
     private val _uiState = MutableStateFlow(listOf(VideoCallData(
         userId = "Mohan",
         isActivate = false
@@ -71,8 +77,10 @@ class VideoCallActivity : AppCompatActivity() {
     private val uiState = _uiState.asStateFlow()
 
     lateinit var localVideoTrack: VideoTrack
+    lateinit var localAudioTrack: AudioTrack
 
-    lateinit var videoCapturer: VideoCapturer
+    private lateinit var videoCapturer : VideoCapturer
+
     lateinit var localSurfaceView: SurfaceViewRenderer
 
     private val mediaConstraint = MediaConstraints().apply {
@@ -94,13 +102,15 @@ class VideoCallActivity : AppCompatActivity() {
         binding = ActivityVideoCallBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        videoCapturer = getVideoCapturer(this)
+
         user = intent?.getStringExtra("userName")?:""
+
+        initPeerConnectionFactory()
 
         println("VideoCallActivity>>>> user onboard >>$user")
 
         observeUserCurrentStatus()
-
-        initPeerConnectionFactory()
 
         binding.bindLocalView()
 
@@ -109,6 +119,37 @@ class VideoCallActivity : AppCompatActivity() {
         observeUserInMeeting()
     }
 
+    private fun observeUserInMeeting() {
+        firebaseClient.checkUserListWhoOneAddNew { userId, userDetails ->
+            println("VideoCallActivity>>>> user check who one available>>$userDetails")
+            if (userDetails.isEmpty()){
+                dbRef.child(USER_TABLE).child(userId).child("userStatus")
+                    .setValue(UserStatus.IN_CALL.name).addOnCompleteListener {  }
+
+                addPeerConnection(userId)
+                println("VideoCallActivity>>>> check local stream is null >>${localVideoTrack.toString()}")
+                val localStream = peerConnectionFactory.createLocalMediaStream("${user}_Track")
+                localStream.addTrack(localVideoTrack)
+                localStream.addTrack(localAudioTrack)
+                peerConnections[userId]!!.peerConnection!!.addStream(localStream)
+                println("VideoCallActivity>>>> user addPeer to This id >>$userId")
+            }
+            else {
+                userDetails.map {
+                    println("VideoCallActivity>>>> user addPeer to This id >>${it.deviceId}")
+                    // Step 1: Create PeerConnection for the peer
+                    addPeerConnection(it.deviceId)
+                    val localStream = peerConnectionFactory.createLocalMediaStream("${user}_Track")
+                    println("VideoCallActivity>>>> check local stream is null >>${localVideoTrack.toString()}")
+                    localStream.addTrack(localVideoTrack)
+                    localStream.addTrack(localAudioTrack)
+                    peerConnections[it.deviceId]!!.peerConnection!!.addStream(localStream)
+                    // Step 2: Create the offer after setting up PeerConnection
+                    createOffer(it.deviceId)
+                }
+            }
+        }
+    }
 
     private fun observeUserCurrentStatus() {
         firebaseClient.listenForUserStatusChanges {
@@ -173,12 +214,8 @@ class VideoCallActivity : AppCompatActivity() {
                     }
                 }
                 DataModelType.IceCandidates -> {
-                    val candidate: IceCandidate? = try {
-                        gson.fromJson(it.data.toString(), IceCandidate::class.java)
-                    }catch (e:Exception){
-                        null
-                    }
-                    candidate?.let { p->
+                    val candidate: IceCandidate = gson.fromJson(it.data.toString(), IceCandidate::class.java)
+                    candidate.let { p->
                         println("VideoCallActivity>> addPeerConnection done second >>>${it.target}>>>$it")
                         peerConnections[it.target]?.peerConnection?.let { peer->
                             peer.addIceCandidate(candidate)
@@ -187,41 +224,6 @@ class VideoCallActivity : AppCompatActivity() {
                 }
 
                 DataModelType.EndCall -> Unit
-            }
-        }
-    }
-
-    private fun observeUserInMeeting() {
-        firebaseClient.checkUserListWhoOneAddNew { userId, userDetails ->
-            println("VideoCallActivity>>>> user check who one available>>$userDetails")
-            if (userDetails.isEmpty()){
-                dbRef.child(USER_TABLE).child(userId).child("userStatus")
-                    .setValue(UserStatus.IN_CALL.name).addOnCompleteListener {  }
-
-                addPeerConnection(userId)
-                println("VideoCallActivity>>>> check local stream is null >>${localVideoTrack.toString()}")
-                val localStream = peerConnectionFactory.createLocalMediaStream("${user}_Track")
-                localStream.addTrack(localVideoTrack)
-                peerConnections[userId]?.peerConnection?.let { peer->
-                    peer.addStream(localStream)
-                }
-                println("VideoCallActivity>>>> user addPeer to This id >>$userId")
-            }
-            else {
-                userDetails.forEach {
-                    println("VideoCallActivity>>>> user addPeer to This id >>${it.deviceId}")
-                    // Step 1: Create PeerConnection for the peer
-                    addPeerConnection(it.deviceId)
-                    val localStream = peerConnectionFactory.createLocalMediaStream("${user}_Track")
-                    println("VideoCallActivity>>>> check local stream is null >>${localVideoTrack.toString()}")
-                    localStream.addTrack(localVideoTrack)
-                    peerConnections[it.deviceId]?.peerConnection?.let { peer->
-                        peer.addStream(localStream)
-                    }
-
-                    // Step 2: Create the offer after setting up PeerConnection
-                    createOffer(it.deviceId)
-                }
             }
         }
     }
@@ -278,80 +280,58 @@ class VideoCallActivity : AppCompatActivity() {
     }
 
     private fun initPeerConnectionFactory() {
-
-        binding.remoteView.run {
-            setMirror(false)
-            setEnableHardwareScaler(true)
-            init(rootEglBase, null)
-        }
-
         // Initialize PeerConnectionFactory
-        PeerConnectionFactory.initialize(PeerConnectionFactory
-            .InitializationOptions.builder(this)
+        val options = PeerConnectionFactory.InitializationOptions.builder(this.applicationContext)
+            .setInjectableLogger({ message, severity, label ->
+                Log.i("WebRTC", "$label: $message")
+            }, Logging.Severity.LS_VERBOSE)
             .setEnableInternalTracer(true)
             .setFieldTrials("WebRTC-H264HighProfile/Enabled/")
-            .createInitializationOptions())
+            .createInitializationOptions()
+        PeerConnectionFactory.initialize(options)
 
 
-        val options = PeerConnectionFactory.Options()
         peerConnectionFactory = PeerConnectionFactory.builder()
             .setVideoDecoderFactory(
-                DefaultVideoDecoderFactory(rootEglBase))
-            .setVideoEncoderFactory(
+                DefaultVideoDecoderFactory(rootEglBase)
+            ).setVideoEncoderFactory(
                 DefaultVideoEncoderFactory(
                     rootEglBase, true, true
                 )
-            ).setOptions(
-                options.apply {
-                    disableNetworkMonitor = false
-                    disableEncryption = false
-                }
-            )
-            .createPeerConnectionFactory()
+            ).setOptions(PeerConnectionFactory.Options().apply {
+                disableNetworkMonitor = false
+                disableEncryption = false
+            }).createPeerConnectionFactory()
     }
 
     private fun addPeerConnection(peerId: String) {
-
-        // Creating a STUN server
-        val stunServer: PeerConnection.IceServer = PeerConnection.IceServer
-            .builder("stun:stun4.l.google.com:19302")
-            .createIceServer()
-
-        // Creating a TURN server with credentials
-        val turnServer: PeerConnection.IceServer = PeerConnection.IceServer
-            .builder("turn:a.relay.metered.ca:443?transport=tcp")
-            .setUsername("83eebabf8b4cce9d5dbcb649")
-            .setPassword("2D7JvfkOQtBdYW3R")
-            .createIceServer()
-
-        val iceServers = listOf(stunServer,turnServer)
-
-        val peerConnectionObserver = object : PeerConnection.Observer {
-            override fun onIceCandidate(candidate: IceCandidate?) {
+        val peerConnectionObserver = object : MyPeerObserver() {
+            override fun onIceCandidate(p0: IceCandidate?) {
                 // Handle ICE candidates
                 firebaseClient.findTargetName(peerId){model->
+                    firebaseClient.sendMessageToOtherClient(
+                        DataModel(type = DataModelType.IceCandidates,
+                            sender = model.sender,
+                            target = model.target,
+                            data = gson.toJson(p0)
+                        )
+                    ){}
                     println("VideoCallActivity>> addPeerConnection done first >>>$peerId>>>$model")
-                    candidate?.let { p->
+                    p0?.let { p->
                         peerConnections[model.target]?.peerConnection?.let { peer->
-                            peer.addIceCandidate(candidate)
+                            peer.addIceCandidate(p0)
                         }
                     }
-                    firebaseClient.sendMessageToOtherClient(
-                    DataModel(type = DataModelType.IceCandidates,
-                        sender = model.sender,
-                        target = model.target,
-                        data = gson.toJson(candidate)
-                    )
-                ){}}
+                }
             }
 
             override fun onConnectionChange(newState: PeerConnection.PeerConnectionState?) {
                 super.onConnectionChange(newState)
                 if (newState == PeerConnection.PeerConnectionState.CONNECTED) {
                     // 1. change my status to in call
-                    firebaseClient.setMeetingRoomId(user,UserStatus.IN_CALL){}
+//                    firebaseClient.setMeetingRoomId(user,UserStatus.IN_CALL){}
 //                     2. clear latest event inside my user section in firebase database
-                    firebaseClient.clearLatestEvent(user)
+//                    firebaseClient.clearLatestEvent(user)
                 }
             }
 
@@ -359,10 +339,10 @@ class VideoCallActivity : AppCompatActivity() {
 
             }
 
-            override fun onAddStream(stream: MediaStream?) {
+            override fun onAddStream(p0: MediaStream?) {
+                p0?.videoTracks?.get(0)?.addSink(binding.remoteView)
                 // Handle incoming media stream (e.g., add to SurfaceView)
-                println("VideoCallActivity>>>> onAddStream id <${stream?.id} >>${stream?.videoTracks?.get(0)}")
-                stream?.videoTracks?.get(0)?.addSink(binding.remoteView)
+                println("VideoCallActivity>>>> onAddStream id <${p0?.id} >>${p0?.videoTracks?.get(0)}")
 //                try {
 //                    val pId = stream?.id?.split('_')?.first()
 //                    pId?.let {
@@ -383,7 +363,6 @@ class VideoCallActivity : AppCompatActivity() {
             }
 
             override fun onSignalingChange(newState: PeerConnection.SignalingState?) {}
-            override fun onIceConnectionChange(newState: PeerConnection.IceConnectionState?) {}
             override fun onIceConnectionReceivingChange(receiving: Boolean) {}
             override fun onIceGatheringChange(newState: PeerConnection.IceGatheringState?) {}
             override fun onRemoveStream(stream: MediaStream?) {}
@@ -391,24 +370,22 @@ class VideoCallActivity : AppCompatActivity() {
             override fun onRenegotiationNeeded() {}
             override fun onAddTrack(p0: RtpReceiver?, p1: Array<out MediaStream>?) {}
         }
-
         val customPeerConnection = CustomPeerConnection(peerConnectionFactory, iceServers, peerConnectionObserver)
         peerConnections[peerId] = customPeerConnection
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
+    override fun onDestroy() { super.onDestroy()
         // Dispose all peer connections
-        peerConnections.forEach { (_, customPeerConnection) ->
-            customPeerConnection.closeConnection()
-        }
+//        peerConnections.forEach { (_, customPeerConnection) ->
+//            customPeerConnection.closeConnection()
+//        }
     }
 
     private fun ActivityVideoCallBinding.bindRemoteView() {
-        videoCallAdapter = VideoCallAdapter(
-            isRemoteView = true,
-            bindCallToWebClient = { id,surface-> }
-        )
+//        videoCallAdapter = VideoCallAdapter(
+//            isRemoteView = true,
+//            bindCallToWebClient = { id,surface-> }
+//        )
 //        remoteView.layoutManager= LinearLayoutManager(this@VideoCallActivity, LinearLayoutManager.VERTICAL,false)
 //        remoteView.adapter = videoCallAdapter
 //        lifecycleScope.launch {
@@ -423,49 +400,61 @@ class VideoCallActivity : AppCompatActivity() {
 
     /** Local view Set done*/
     private fun ActivityVideoCallBinding.bindLocalView() {
+        localSurfaceView = localView
+        startLocalVideoCapture()
         println("VideoCallActivity>>> Local view settled done")
-        val localAdapter = VideoCallAdapter(
-            isRemoteView = false,
-            bindCallToWebClient = { id,surface->
-                localSurfaceView = surface
-                startLocalVideoCapture()
-            }
-        )
-        localView.layoutManager= LinearLayoutManager(this@VideoCallActivity, LinearLayoutManager.VERTICAL,false)
-        localView.adapter = localAdapter
-        localAdapter.submitList(listOf(VideoCallData()))
+//        val localAdapter = VideoCallAdapter(
+//            isRemoteView = false,
+//            bindCallToWebClient = { id,surface->
+//                localSurfaceView = surface
+//                startLocalVideoCapture()
+//            }
+//        )
+//        localView.layoutManager= LinearLayoutManager(this@VideoCallActivity, LinearLayoutManager.VERTICAL,false)
+//        localView.adapter = localAdapter
+//        localAdapter.submitList(listOf(VideoCallData()))
     }
     private fun startLocalVideoCapture() {
         // Initialize the local video renderer
-        localSurfaceView.init(rootEglBase, null)
-        localSurfaceView.setMirror(false)
+        localSurfaceView.run {
+            setMirror(false)
+            setEnableHardwareScaler(true)
+            init(rootEglBase, null)
+        }
+        binding.remoteView.run {
+            setMirror(false)
+            setEnableHardwareScaler(true)
+            init(rootEglBase, null)
+        }
 
         // Create video source and video track
         val videoSource = peerConnectionFactory.createVideoSource(false)
-        // Use Camera2Enumerator if available
-        createCameraCapturer(Camera1Enumerator(false))?.let {
-            videoCapturer = it
-        }
+        val audioSource = peerConnectionFactory.createAudioSource(MediaConstraints().apply {
+            mandatory.add(MediaConstraints.KeyValuePair("OfferToReceiveAudio","true"))
+        })
 
         // Start video capturer
-        val surfaceTextureHelper = SurfaceTextureHelper.create("CaptureThread", rootEglBase)
-        videoCapturer.initialize(surfaceTextureHelper, this, videoSource.capturerObserver)
-        videoCapturer.startCapture(1280, 720, 30)
+        val surfaceTextureHelper = SurfaceTextureHelper.create(
+            Thread.currentThread().name,rootEglBase
+        )
+        videoCapturer.initialize(surfaceTextureHelper, this.applicationContext, videoSource.capturerObserver)
+        videoCapturer.startCapture(
+            720,480,20
+        )
 
         // Create local video track
         localVideoTrack = peerConnectionFactory.createVideoTrack("${user}_Video", videoSource)
-
+        localAudioTrack = peerConnectionFactory.createAudioTrack("${user}_Audio", audioSource)
         // Set the local renderer for the video track
         localVideoTrack.addSink(localSurfaceView)
     }
 
-    private fun createCameraCapturer(enumerator: CameraEnumerator): VideoCapturer? {
-        for (deviceName in enumerator.deviceNames) {
-            if (enumerator.isFrontFacing(deviceName)) {
-                return enumerator.createCapturer(deviceName, null)
-            }
+    private fun getVideoCapturer(context: Context): CameraVideoCapturer =
+        Camera2Enumerator(context).run {
+            deviceNames.find {
+                isFrontFacing(it)
+            }?.let {
+                createCapturer(it,null)
+            }?:throw IllegalStateException()
         }
-        return null
-    }
-
 }

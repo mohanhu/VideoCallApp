@@ -20,14 +20,10 @@
         app:layout_constraintBottom_toTopOf="@+id/controlPanelLayout"
         app:layout_constraintEnd_toEndOf="parent">
 
-        <androidx.recyclerview.widget.RecyclerView
+        <org.webrtc.SurfaceViewRenderer
             android:id="@+id/localView"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:elevation="@dimen/_100sdp"
-            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
-            tools:itemCount="1"
-            tools:listitem="@layout/video_remote_surface_view" />
+            android:layout_height="match_parent"/>
     </com.google.android.material.card.MaterialCardView>
 
     <androidx.constraintlayout.widget.ConstraintLayout

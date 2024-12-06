@@ -20,7 +20,7 @@ open class MyPeerObserver : PeerConnection.Observer {
             }
             PeerConnection.IceConnectionState.FAILED -> {
                 // Connection has failed
-                Log.d("MyPeerObserver WebRTC", "Peer connection has failed.")
+                Log.d("MyPeerObserver WebRTC", "Peer connection has failed.$newState")
                 // Handle reconnection logic or show a failure message
             }
             PeerConnection.IceConnectionState.CLOSED -> {
